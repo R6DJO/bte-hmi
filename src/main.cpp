@@ -1,11 +1,16 @@
+#include <Arduino.h>
 #include "SPIFFS.h"
-// #include <Arduino.h>
 #include <Arduino_JSON.h>
 // #include <ArduinoJson.h>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <WiFi.h>
 
+#include "modbus.h"
+
+// 
+HardwareSerial &Debug = Serial;
+HardwareSerial &Modbus = Serial1;
 // Replace with your network credentials
 const char *ssid = "fresh";
 const char *password = "ZAQ12wsx";
@@ -19,6 +24,10 @@ AsyncWebSocket ws("/ws");
 const int ledPin1 = 12;
 const int ledPin2 = 13;
 const int ledPin3 = 14;
+
+UART_message buffer1;
+UART_message *rxBuffer = &buffer1;
+// char rxBuffer[32] = {0};
 
 String message = "";
 String sliderValue1 = "0";
@@ -41,7 +50,8 @@ const int resolution = 8;
 // JSONVar sliderValues;
 JSONVar lampConfig;
 
-typedef struct Lamp {
+typedef struct Lamp
+{
   uint8_t mode;
   uint8_t threshold;
   uint8_t current_status;
@@ -50,7 +60,8 @@ typedef struct Lamp {
 
 Lamp lamp = {1, 66, 0, 33};
 
-String getData() {
+String getData()
+{
   lampConfig["mode"] = String(lamp.mode);
   lampConfig["threshold"] = String(lamp.threshold);
   lampConfig["status"] = String(lamp.current_status);
@@ -60,73 +71,88 @@ String getData() {
 }
 
 // Initialize SPIFFS
-void initFS() {
-  if (!SPIFFS.begin()) {
-    Serial.println("An error has occurred while mounting SPIFFS");
-  } else {
-    Serial.println("SPIFFS mounted successfully");
+void initFS()
+{
+  if (!SPIFFS.begin())
+  {
+    Debug.println("An error has occurred while mounting SPIFFS");
+  }
+  else
+  {
+    Debug.println("SPIFFS mounted successfully");
   }
 }
 
 // Initialize WiFi
-void initWiFi() {
+void initWiFi()
+{
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
-  Serial.print("Connecting to WiFi ..");
-  while (WiFi.status() != WL_CONNECTED) {
-    Serial.print('.');
+  Debug.print("Connecting to WiFi ..");
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    Debug.print('.');
     delay(1000);
   }
-  Serial.print("\nhttp://");
-  Serial.println(WiFi.localIP());
+  Debug.print("\nhttp://");
+  Debug.println(WiFi.localIP());
 }
 
-void notifyClients(String Message) {
-  Serial.print("->");
-  Serial.println(Message);
+void notifyClients(String Message)
+{
+  Debug.print("->");
+  Debug.println(Message);
   ws.textAll(Message);
 }
 
-void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
+void handleWebSocketMessage(void *arg, uint8_t *data, size_t len)
+{
   AwsFrameInfo *info = (AwsFrameInfo *)arg;
   if (info->final && info->index == 0 && info->len == len &&
-      info->opcode == WS_TEXT) {
+      info->opcode == WS_TEXT)
+  {
     data[len] = 0;
     message = (char *)data;
-    if (message.indexOf("threshold") >= 0) {
+    if (message.indexOf("threshold") >= 0)
+    {
       uint8_t value = message.substring(10).toInt();
-      Serial.print("<-threshold=");
-      Serial.println(value);
+      Debug.print("<--threshold=");
+      Debug.println(value);
       lamp.threshold = value;
       notifyClients(getData());
     }
-    if (message.indexOf("mode") >= 0) {
+    if (message.indexOf("mode") >= 0)
+    {
       uint8_t value = message.substring(5).toInt();
-      Serial.print("<-mode=");
-      Serial.println(value);
+      Debug.print("<--mode=");
+      Debug.println(value);
       lamp.mode = value;
       notifyClients(getData());
     }
-    if (strcmp((char *)data, "getValues") == 0) {
-      Serial.println("<-getValues");
+    if (strcmp((char *)data, "getValues") == 0)
+    {
+      Debug.println("<--getValues");
       notifyClients(getData());
     }
-    if (strcmp((char *)data, "lampSwitch") == 0) {
-      Serial.println("<-lampSwitch");
+    if (strcmp((char *)data, "lampSwitch") == 0)
+    {
+      Debug.println("<--lampSwitch");
       lamp.current_status = (!lamp.current_status);
       notifyClients(getData());
     }
   }
 }
 void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
-             AwsEventType type, void *arg, uint8_t *data, size_t len) {
-  switch (type) {
+             AwsEventType type, void *arg, uint8_t *data, size_t len)
+{
+  switch (type)
+  {
   case WS_EVT_CONNECT:
-    Serial.printf("WebSocket client #%u connected from %s\n", client->id(),
-                  client->remoteIP().toString().c_str());
+    Debug.printf("WebSocket client #%u connected from %s\n", client->id(),
+                 client->remoteIP().toString().c_str());
     break;
   case WS_EVT_DISCONNECT:
-    Serial.printf("WebSocket client #%u disconnected\n", client->id());
+    Debug.printf("WebSocket client #%u disconnected\n", client->id());
     break;
   case WS_EVT_DATA:
     handleWebSocketMessage(arg, data, len);
@@ -137,13 +163,66 @@ void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
   }
 }
 
-void initWebSocket() {
+void initWebSocket()
+{
   ws.onEvent(onEvent);
   server.addHandler(&ws);
 }
 
-void setup() {
-  Serial.begin(115200);
+// General callback function for any UART -- used with a lambda std::function within HardwareSerial::onReceive()
+void processOnReceiving(HardwareSerial &Serial)
+{
+  // detects which Serial# is being used here
+  int8_t uart_num = -1;
+  if (&Serial == &Debug)
+  {
+    uart_num = 0;
+  }
+  else if (&Serial == &Modbus)
+  {
+    uart_num = 1;
+  }
+
+  // Prints some information on the current Serial (UART0 or USB CDC)
+  if (uart_num == -1)
+  {
+    Debug.println("This is not a know Arduino Serial# object...");
+    return;
+  }
+  Debug.printf("\nOnReceive Callback --> Received Data from UART%d\n", uart_num);
+  Debug.printf("Received %d bytes\n", Serial.available());
+  Debug.printf("First byte is '%c' [0x%02x]\n", Serial.peek(), Serial.peek());
+  uint8_t charPerLine = 0;
+  rxBuffer->msg_length = Serial.read(rxBuffer->msg_data, 31);
+  rxBuffer->msg_data[rxBuffer->msg_length] = '\0';
+  Debug.println((char*)rxBuffer->msg_data);
+
+  modbus_status_t status = msg_validate(rxBuffer);
+  if(status == MB_OK){
+    Debug.println("MSG valid");
+  } else {
+    Debug.println("MSG invalid");
+  }
+  // while (Serial.available())
+  // {
+  //   char c = Serial.read();
+  //   Debug.printf("'%c' [0x%02x] ", c, c);
+  //   if (++charPerLine == 10)
+  //   {
+  //     charPerLine = 0;
+  //     Debug.println();
+  //   }
+  // }
+}
+
+void setup()
+{
+  Debug.begin(115200);
+  Debug.onReceive([]()
+                  { processOnReceiving(Debug); });
+  Modbus.begin(9600);
+  Modbus.onReceive([]()
+                   { processOnReceiving(Modbus); });
   pinMode(ledPin1, OUTPUT);
   pinMode(ledPin2, OUTPUT);
   pinMode(ledPin3, OUTPUT);
@@ -163,9 +242,8 @@ void setup() {
   initWebSocket();
 
   // Web Server Root URL
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-    request->send(SPIFFS, "/index.html", "text/html");
-  });
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
+            { request->send(SPIFFS, "/index.html", "text/html"); });
 
   server.serveStatic("/", SPIFFS, "/");
 
@@ -173,7 +251,8 @@ void setup() {
   server.begin();
 }
 
-void loop() {
+void loop()
+{
   ledcWrite(ledChannel1, dutyCycle1);
   ledcWrite(ledChannel2, dutyCycle2);
   ledcWrite(ledChannel3, dutyCycle3);
