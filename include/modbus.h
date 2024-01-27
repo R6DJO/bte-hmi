@@ -12,10 +12,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include "main.h"
+#include "modbus_conf.h"
 
-#define DEVICE_ADDRESS  0x01
-
-#define START_ADDRESS   0x0100
 #define REGISTER_COUNT  8
 
 #define BUFFER_SIZE 64
