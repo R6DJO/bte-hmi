@@ -8,7 +8,7 @@
 
 #include "modbus.h"
 
-// 
+//
 HardwareSerial &Debug = Serial;
 HardwareSerial &Modbus = Serial1;
 // Replace with your network credentials
@@ -62,10 +62,10 @@ Lamp lamp = {1, 66, 0, 33};
 
 String getData()
 {
-  lampConfig["mode"] = String(lamp.mode);
-  lampConfig["threshold"] = String(lamp.threshold);
-  lampConfig["status"] = String(lamp.current_status);
-  lampConfig["ambient_light"] = String(lamp.ambient_light);
+  lampConfig["mode"] = lamp.mode;
+  lampConfig["threshold"] = lamp.threshold;
+  lampConfig["status"] = lamp.current_status;
+  lampConfig["ambient_light"] = lamp.ambient_light;
   String jsonString = JSON.stringify(lampConfig);
   return jsonString;
 }
@@ -94,14 +94,14 @@ void initWiFi()
     Debug.print('.');
     delay(1000);
   }
-  Debug.print("\nhttp://");
-  Debug.println(WiFi.localIP());
+  Debug.printf("\nhttp://%s\n", WiFi.localIP().toString().c_str());
+  // Debug.println(WiFi.localIP());
 }
 
 void notifyClients(String Message)
 {
-  Debug.print("->");
-  Debug.println(Message);
+  Debug.printf("-->%s\n", Message.c_str());
+  // Debug.println(Message);
   ws.textAll(Message);
 }
 
@@ -116,22 +116,22 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len)
     if (message.indexOf("threshold") >= 0)
     {
       uint8_t value = message.substring(10).toInt();
-      Debug.print("<--threshold=");
-      Debug.println(value);
+      Debug.printf("<--threshold=%u\n", value);
+      // Debug.println(value);
       lamp.threshold = value;
       notifyClients(getData());
     }
     if (message.indexOf("mode") >= 0)
     {
       uint8_t value = message.substring(5).toInt();
-      Debug.print("<--mode=");
-      Debug.println(value);
+      Debug.printf("<--mode=%d\n", value);
+      // Debug.println(value);
       lamp.mode = value;
       notifyClients(getData());
     }
     if (strcmp((char *)data, "getValues") == 0)
     {
-      Debug.println("<--getValues");
+      Debug.printf("<--getValues\n");
       notifyClients(getData());
     }
     if (strcmp((char *)data, "lampSwitch") == 0)
@@ -189,18 +189,21 @@ void processOnReceiving(HardwareSerial &Serial)
     Debug.println("This is not a know Arduino Serial# object...");
     return;
   }
-  Debug.printf("\nOnReceive Callback --> Received Data from UART%d\n", uart_num);
-  Debug.printf("Received %d bytes\n", Serial.available());
-  Debug.printf("First byte is '%c' [0x%02x]\n", Serial.peek(), Serial.peek());
+  Debug.printf("\nOnReceive Callback --> Received Data from UART%d\n"
+               "Received %d bytes\nFirst byte is '%c' [0x%02x]\n",
+               uart_num, Serial.available(), Serial.peek(), Serial.peek());
   uint8_t charPerLine = 0;
   rxBuffer->msg_length = Serial.read(rxBuffer->msg_data, 31);
   rxBuffer->msg_data[rxBuffer->msg_length] = '\0';
-  Debug.println((char*)rxBuffer->msg_data);
+  Debug.println((char *)rxBuffer->msg_data);
 
   modbus_status_t status = msg_validate(rxBuffer);
-  if(status == MB_OK){
+  if (status == MB_OK)
+  {
     Debug.println("MSG valid");
-  } else {
+  }
+  else
+  {
     Debug.println("MSG invalid");
   }
   // while (Serial.available())

@@ -13,4 +13,4 @@
 #define REGISTER_COUNT  8
 
 
-#endif /* INC_MODBUS_CONF_H_ *
+#endif /* INC_MODBUS_CONF_H_ */
