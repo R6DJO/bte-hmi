@@ -1,12 +1,13 @@
 #define DEBUG
 #include <Arduino.h>
-#include "SPIFFS.h"
+// #include "SPIFFS.h"
 #include <Arduino_JSON.h>
 // #include <ArduinoJson.h>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
-#include <WiFi.h>
+// #include <WiFi.h>
 
+#include "init.h"
 #include "modbus.h"
 
 void mb_buf_print(UART_message *msg);
@@ -19,16 +20,12 @@ void requestCurrentLampMode(void);
 HardwareSerial &Debug = Serial;
 HardwareSerial &Modbus = Serial1;
 
-// Replace with your network credentials
-const char *ssid = "fresh";
-const char *password = "ZAQ12wsx";
-
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80);
 // Create a WebSocket object
 AsyncWebSocket ws("/ws");
 
-// for RX/TX
+// Buffer for RX/TX msg
 UART_message buffer1;
 UART_message buffer2;
 UART_message *rxBuffer = &buffer1;
@@ -70,33 +67,6 @@ String getData()
   lampConfig["ambient_light"] = lamp.ambient_light;
   String jsonString = JSON.stringify(lampConfig);
   return jsonString;
-}
-
-// Initialize SPIFFS
-void initFS()
-{
-  if (!SPIFFS.begin())
-  {
-    Debug.println("HMI: An error has occurred while mounting SPIFFS");
-  }
-  else
-  {
-    Debug.println("HMI: SPIFFS mounted successfully");
-  }
-}
-
-// Initialize WiFi
-void initWiFi()
-{
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-  Debug.print("HMI Connecting to WiFi ..");
-  while (WiFi.status() != WL_CONNECTED)
-  {
-    Debug.print('.');
-    delay(1000);
-  }
-  Debug.printf("\nHMI: http://%s\n", WiFi.localIP().toString().c_str());
 }
 
 void notifyClients(String Message)

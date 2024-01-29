@@ -382,10 +382,6 @@ modbus_status_t prepare_request_registers(MODBUS_message *request, UART_message 
 
 modbus_status_t response_processing(MODBUS_message *response, MODBUS_message *request, MODBUS_registers *registers)
 {
-    // AI[0] - current light level
-    // AO[1] - light threshold
-    // DO[0].0 - mode 1-automatic/0-manual
-    // DO[1].0 - light 1-on/0-off
     if(response->device_address!=request->device_address)
     {
         return WRONG_ADDRESS;
