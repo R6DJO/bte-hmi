@@ -1,3 +1,4 @@
+#define DEBUG
 #include <Arduino.h>
 #include "SPIFFS.h"
 #include <Arduino_JSON.h>
@@ -8,13 +9,16 @@
 
 #include "modbus.h"
 
+void mb_buf_print(UART_message *msg);
 void periodicUpdateSensors(void);
 void requestAmbientLightValue(void);
 void requestCurrentLampStatus(void);
 void requestCurrentLampMode(void);
-//
+
+// UART objects
 HardwareSerial &Debug = Serial;
 HardwareSerial &Modbus = Serial1;
+
 // Replace with your network credentials
 const char *ssid = "fresh";
 const char *password = "ZAQ12wsx";
@@ -22,40 +26,32 @@ const char *password = "ZAQ12wsx";
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80);
 // Create a WebSocket object
-
 AsyncWebSocket ws("/ws");
-// Set LED GPIO
-const int ledPin1 = 12;
-const int ledPin2 = 13;
-const int ledPin3 = 14;
 
+// for RX/TX
 UART_message buffer1;
 UART_message buffer2;
 UART_message *rxBuffer = &buffer1;
 UART_message *txBuffer = &buffer1;
-// char rxBuffer[32] = {0};
+
+// Modbus MSG recived flag
+volatile uint8_t mb_msg_rxd = false;
+MODBUS_message rx_msg;
+MODBUS_message mb_request;
+MODBUS_registers LCU_registers;
+// LCU_registers.MB_address = 0x01;
+// AI[0] - current light level
+// AO[1] - light threshold
+// DO[0].0 - mode 1-automatic/0-manual
+// DO[1].0 - light 1-on/0-off
 
 String message = "";
-String sliderValue1 = "0";
-String sliderValue2 = "0";
-String sliderValue3 = "0";
-
-int dutyCycle1;
-int dutyCycle2;
-int dutyCycle3;
-
-// setting PWM properties
-const int freq = 5000;
-const int ledChannel1 = 0;
-const int ledChannel2 = 1;
-const int ledChannel3 = 2;
-
-const int resolution = 8;
 
 // Json Variable to Hold Slider Values
 // JSONVar sliderValues;
 JSONVar lampConfig;
 
+// Lamp data
 typedef struct Lamp
 {
   uint8_t mode;
@@ -81,11 +77,11 @@ void initFS()
 {
   if (!SPIFFS.begin())
   {
-    Debug.println("An error has occurred while mounting SPIFFS");
+    Debug.println("HMI: An error has occurred while mounting SPIFFS");
   }
   else
   {
-    Debug.println("SPIFFS mounted successfully");
+    Debug.println("HMI: SPIFFS mounted successfully");
   }
 }
 
@@ -94,20 +90,18 @@ void initWiFi()
 {
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
-  Debug.print("Connecting to WiFi ..");
+  Debug.print("HMI Connecting to WiFi ..");
   while (WiFi.status() != WL_CONNECTED)
   {
     Debug.print('.');
     delay(1000);
   }
-  Debug.printf("\nhttp://%s\n", WiFi.localIP().toString().c_str());
-  // Debug.println(WiFi.localIP());
+  Debug.printf("\nHMI: http://%s\n", WiFi.localIP().toString().c_str());
 }
 
 void notifyClients(String Message)
 {
-  Debug.printf("-->%s\n", Message.c_str());
-  // Debug.println(Message);
+  Debug.printf("HMI-->Usr: %s\n", Message.c_str());
   ws.textAll(Message);
 }
 
@@ -122,7 +116,7 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len)
     if (message.indexOf("threshold") >= 0)
     {
       uint8_t value = message.substring(10).toInt();
-      Debug.printf("<--threshold=%u\n", value);
+      Debug.printf("HMI<--USR threshold=%u\n", value);
       // Debug.println(value);
       lamp.threshold = value;
       notifyClients(getData());
@@ -130,19 +124,19 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len)
     if (message.indexOf("mode") >= 0)
     {
       uint8_t value = message.substring(5).toInt();
-      Debug.printf("<--mode=%d\n", value);
+      Debug.printf("HMI<--Usr mode=%d\n", value);
       // Debug.println(value);
       lamp.mode = value;
       notifyClients(getData());
     }
     if (strcmp((char *)data, "getValues") == 0)
     {
-      Debug.printf("<--getValues\n");
+      Debug.printf("HMI<--Usr getValues\n");
       notifyClients(getData());
     }
     if (strcmp((char *)data, "lampSwitch") == 0)
     {
-      Debug.println("<--lampSwitch");
+      Debug.println("HMI<--Usr lampSwitch");
       lamp.current_status = (!lamp.current_status);
       notifyClients(getData());
     }
@@ -154,11 +148,11 @@ void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
   switch (type)
   {
   case WS_EVT_CONNECT:
-    Debug.printf("WebSocket client #%u connected from %s\n", client->id(),
+    Debug.printf("HMI: WebSocket client #%u connected from %s\n", client->id(),
                  client->remoteIP().toString().c_str());
     break;
   case WS_EVT_DISCONNECT:
-    Debug.printf("WebSocket client #%u disconnected\n", client->id());
+    Debug.printf("HMI: WebSocket client #%u disconnected\n", client->id());
     break;
   case WS_EVT_DATA:
     handleWebSocketMessage(arg, data, len);
@@ -192,36 +186,19 @@ void processOnReceiving(HardwareSerial &Serial)
   // Prints some information on the current Serial (UART0 or USB CDC)
   if (uart_num == -1)
   {
-    Debug.println("This is not a know Arduino Serial# object...");
+    Debug.println("HMI: This is not a know Arduino Serial# object...");
     return;
   }
-  Debug.printf("\nOnReceive Callback --> Received Data from UART%d\n"
+  Debug.printf("\nHMI: OnReceive Callback --> Received Data from UART%d\n"
                "Received %d bytes\nFirst byte is '%c' [0x%02x]\n",
                uart_num, Serial.available(), Serial.peek(), Serial.peek());
   uint8_t charPerLine = 0;
   rxBuffer->msg_length = Serial.read(rxBuffer->msg_data, 31);
   rxBuffer->msg_data[rxBuffer->msg_length] = '\0';
-  Debug.println((char *)rxBuffer->msg_data);
-
-  modbus_status_t status = msg_validate(rxBuffer);
-  if (status == MB_OK)
-  {
-    Debug.println("MSG valid");
-  }
-  else
-  {
-    Debug.println("MSG invalid");
-  }
-  // while (Serial.available())
-  // {
-  //   char c = Serial.read();
-  //   Debug.printf("'%c' [0x%02x] ", c, c);
-  //   if (++charPerLine == 10)
-  //   {
-  //     charPerLine = 0;
-  //     Debug.println();
-  //   }
-  // }
+#ifdef DEBUG
+  mb_buf_print(rxBuffer);
+#endif
+  mb_msg_rxd = true;
 }
 
 void mb_buf_print(UART_message *msg)
@@ -229,11 +206,11 @@ void mb_buf_print(UART_message *msg)
   modbus_status_t status = msg_validate(txBuffer);
   if (status == MB_OK)
   {
-    Debug.println("Message valid");
+    Debug.println("HMI: Message valid");
   }
   else
   {
-    Debug.println("Message ivalid");
+    Debug.println("HMI: Message ivalid");
   }
   for (uint8_t i = 0; i < txBuffer->msg_length; i++)
   {
@@ -244,27 +221,16 @@ void mb_buf_print(UART_message *msg)
 
 void setup()
 {
+  // Add callback for UART RX
   Debug.begin(115200);
   Debug.onReceive([]()
                   { processOnReceiving(Debug); });
   Modbus.begin(9600);
   Modbus.onReceive([]()
                    { processOnReceiving(Modbus); });
-  pinMode(ledPin1, OUTPUT);
-  pinMode(ledPin2, OUTPUT);
-  pinMode(ledPin3, OUTPUT);
+
   initFS();
   initWiFi();
-
-  // configure LED PWM functionalitites
-  ledcSetup(ledChannel1, freq, resolution);
-  ledcSetup(ledChannel2, freq, resolution);
-  ledcSetup(ledChannel3, freq, resolution);
-
-  // attach the channel to the GPIO to be controlled
-  ledcAttachPin(ledPin1, ledChannel1);
-  ledcAttachPin(ledPin2, ledChannel2);
-  ledcAttachPin(ledPin3, ledChannel3);
 
   initWebSocket();
 
@@ -276,13 +242,21 @@ void setup()
 
   // Start server
   server.begin();
+
+  LCU_registers.MB_address = 0x01;
 }
 
 void loop()
 {
-  ledcWrite(ledChannel1, dutyCycle1);
-  ledcWrite(ledChannel2, dutyCycle2);
-  ledcWrite(ledChannel3, dutyCycle3);
+  if (mb_msg_rxd)
+  {
+    mb_msg_rxd = false;
+    if (msg_validate(rxBuffer))
+    {
+      msg_parse(rxBuffer, &rx_msg);
+      response_processing(&rx_msg, &mb_request, &LCU_registers);
+    }
+  }
   periodicUpdateSensors();
   ws.cleanupClients();
 }
@@ -320,17 +294,50 @@ void periodicUpdateSensors(void)
 void requestAmbientLightValue(void)
 {
   Debug.printf("Request ambient light at:       %u\n", millis());
-  prepare_request_registers(0x01, 0x01, 0x0100, 0x0001, txBuffer);
+  mb_request.device_address = 0x01;
+  mb_request.command = 0x01;
+  mb_request.start_address = 0x0100;
+  mb_request.data_length = 0x0001;
+  prepare_request_registers(&mb_request, txBuffer);
+#ifdef DEBUG
   mb_buf_print(txBuffer);
+#endif
   Modbus.write(txBuffer->msg_data, txBuffer->msg_length);
 }
 
 void requestCurrentLampStatus(void)
 {
   Debug.printf("Request current light status at:%u\n", millis());
+  mb_request.device_address = 0x01;
+  mb_request.command = 0x02;
+  mb_request.start_address = 0x0100;
+  mb_request.data_length = 0x0001;
+  prepare_request_registers(&mb_request, txBuffer);
+#ifdef DEBUG
+  mb_buf_print(txBuffer);
+#endif
+  Modbus.write(txBuffer->msg_data, txBuffer->msg_length);
 }
 
 void requestCurrentLampMode(void)
 {
   Debug.printf("Request current light mode at:  %u\n", millis());
+  mb_request.device_address = 0x01;
+  mb_request.command = 0x03;
+  mb_request.start_address = 0x0100;
+  mb_request.data_length = 0x0001;
+  prepare_request_registers(&mb_request, txBuffer);
+#ifdef DEBUG
+  mb_buf_print(txBuffer);
+#endif
+  Modbus.write(txBuffer->msg_data, txBuffer->msg_length);
 }
+
+// void response_processing(MODBUS_message *response, MODBUS_registers *LCU_registers)
+// {
+//   // AI[0] - current light level
+//   // AO[1] - light threshold
+//   // DO[0].0 - mode 1-automatic/0-manual
+//   // DO[1].0 - light 1-on/0-off
+//   ;
+// }

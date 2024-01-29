@@ -9,7 +9,8 @@
 
 uint16_t MODBUS_CRC16(const uint8_t *nData, uint16_t wLength)
 {
-    union {
+    union
+    {
         uint8_t u8[2];
         uint16_t u16;
     } val;
@@ -227,7 +228,7 @@ modbus_status_t address_validate(MODBUS_message *rx_msg, MODBUS_registers *regis
 modbus_status_t response_prepare(MODBUS_message *rx_msg, MODBUS_registers *registers, UART_message *tx_buf)
 {
     uint16_t shift;
-    if (rx_msg->device_address != DEVICE_ADDRESS)
+    if (rx_msg->device_address != registers->MB_address)
     {
         return WRONG_ADDRESS;
     }
@@ -235,7 +236,7 @@ modbus_status_t response_prepare(MODBUS_message *rx_msg, MODBUS_registers *regis
     modbus_status_t adreess_is_valid = address_validate(rx_msg, registers);
     if (adreess_is_valid)
     {
-        tx_buf->msg_data[tx_buf->msg_length++] = DEVICE_ADDRESS;
+        tx_buf->msg_data[tx_buf->msg_length++] = registers->MB_address;
         tx_buf->msg_data[tx_buf->msg_length++] = rx_msg->command;
         switch (rx_msg->command)
         {
@@ -361,6 +362,38 @@ modbus_status_t prepare_request_registers(uint8_t device_address, uint8_t comman
     uint16_t crc = MODBUS_CRC16(tx_buf->msg_data, tx_buf->msg_length);
     tx_buf->msg_data[tx_buf->msg_length++] = crc & 0xFF;
     tx_buf->msg_data[tx_buf->msg_length++] = crc >> 8;
+    return MB_OK;
+}
+
+modbus_status_t prepare_request_registers(MODBUS_message *request, UART_message *tx_buf)
+{
+    tx_buf->msg_length = 0;
+    tx_buf->msg_data[tx_buf->msg_length++] = request->device_address;
+    tx_buf->msg_data[tx_buf->msg_length++] = request->command;
+    tx_buf->msg_data[tx_buf->msg_length++] = request->start_address >> 8;
+    tx_buf->msg_data[tx_buf->msg_length++] = request->start_address & 0xFF;
+    tx_buf->msg_data[tx_buf->msg_length++] = request->data_length >> 8;
+    tx_buf->msg_data[tx_buf->msg_length++] = request->data_length & 0xFF;
+    uint16_t crc = MODBUS_CRC16(tx_buf->msg_data, tx_buf->msg_length);
+    tx_buf->msg_data[tx_buf->msg_length++] = crc & 0xFF;
+    tx_buf->msg_data[tx_buf->msg_length++] = crc >> 8;
+    return MB_OK;
+}
+
+modbus_status_t response_processing(MODBUS_message *response, MODBUS_message *request, MODBUS_registers *registers)
+{
+    // AI[0] - current light level
+    // AO[1] - light threshold
+    // DO[0].0 - mode 1-automatic/0-manual
+    // DO[1].0 - light 1-on/0-off
+    if(response->device_address!=request->device_address)
+    {
+        return WRONG_ADDRESS;
+    }
+    if(response->command!=request->command)
+    {
+        return WRONG_COMMAND;
+    }
     return MB_OK;
 }
 
