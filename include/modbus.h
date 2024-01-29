@@ -14,15 +14,20 @@
 #include "main.h"
 #include "modbus_conf.h"
 
-#define REGISTER_COUNT  8
+#define REGISTER_COUNT 8
 
 #define BUFFER_SIZE 64
 
-typedef enum {
-	MB_ERR, MB_OK, WRONG_ADDRESS, WRONG_COMMAND
+typedef enum
+{
+	MB_ERR,
+	MB_OK,
+	WRONG_ADDRESS,
+	WRONG_COMMAND
 } modbus_status_t;
 
-typedef enum {
+typedef enum
+{
 	READ_DO = 1,
 	READ_DI,
 	READ_AO,
@@ -35,12 +40,14 @@ typedef enum {
 	WRITE_AO_MULTI
 } modbus_command_t;
 
-typedef struct UART_message {
+typedef struct UART_message
+{
 	uint16_t msg_length;
 	uint8_t msg_data[BUFFER_SIZE];
 } UART_message;
 
-typedef struct MODBUS_message {
+typedef struct MODBUS_message
+{
 	uint16_t start_address;
 	uint16_t data_length;
 	uint16_t crc;
@@ -51,7 +58,8 @@ typedef struct MODBUS_message {
 
 } MODBUS_message;
 
-typedef struct MODBUS_registers {
+typedef struct MODBUS_registers
+{
 	uint16_t AO[REGISTER_COUNT];
 	uint16_t AI[REGISTER_COUNT];
 	uint16_t DO[REGISTER_COUNT];
@@ -68,15 +76,17 @@ typedef struct MODBUS_registers {
 
 uint16_t MODBUS_CRC16(const uint8_t *nData, uint16_t wLength);
 uint16_t CRC16(const uint8_t *nData, uint16_t wLength);
-//char * itoalz(char *buf, uint8_t value);
-//uint8_t hex2int(char buf);
-modbus_status_t msg_validate(UART_message*);
-modbus_status_t msg_parse(UART_message*, MODBUS_message*);
+// char * itoalz(char *buf, uint8_t value);
+// uint8_t hex2int(char buf);
+modbus_status_t msg_validate(UART_message *);
+modbus_status_t msg_parse(UART_message *, MODBUS_message *);
 modbus_status_t address_validate(MODBUS_message *rx_msg,
-		MODBUS_registers *registers);
-modbus_status_t response_prepare(MODBUS_message*, MODBUS_registers*,
-		UART_message*);
-//uint8_t prepare_tx_msg(union message *rx_msg, union message *tx_msg, uint16_t *data);
-//void prepare_tx_buf(union message *tx_msg, uint8_t *tx_buf);
+								 MODBUS_registers *registers);
+modbus_status_t response_prepare(MODBUS_message *, MODBUS_registers *,
+								 UART_message *);
+modbus_status_t prepare_request_registers(uint8_t device_address, uint8_t command, uint16_t start_address, uint16_t count, UART_message *);
+// modbus_status_t prepare_request_registers(uint8_t device_address,uint16_t start_address,uint16_t count,UART_message*);
+// uint8_t prepare_tx_msg(union message *rx_msg, union message *tx_msg, uint16_t *data);
+// void prepare_tx_buf(union message *tx_msg, uint8_t *tx_buf);
 
 #endif /* INC_MODBUS_H_ */

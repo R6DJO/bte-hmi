@@ -348,6 +348,22 @@ modbus_status_t response_prepare(MODBUS_message *rx_msg, MODBUS_registers *regis
     return MB_OK;
 }
 
+modbus_status_t prepare_request_registers(uint8_t device_address, uint8_t command, uint16_t start_address,
+                                          uint16_t count, UART_message *tx_buf)
+{
+    tx_buf->msg_length = 0;
+    tx_buf->msg_data[tx_buf->msg_length++] = device_address;
+    tx_buf->msg_data[tx_buf->msg_length++] = command;
+    tx_buf->msg_data[tx_buf->msg_length++] = start_address >> 8;
+    tx_buf->msg_data[tx_buf->msg_length++] = start_address & 0xFF;
+    tx_buf->msg_data[tx_buf->msg_length++] = count >> 8;
+    tx_buf->msg_data[tx_buf->msg_length++] = count & 0xFF;
+    uint16_t crc = MODBUS_CRC16(tx_buf->msg_data, tx_buf->msg_length);
+    tx_buf->msg_data[tx_buf->msg_length++] = crc & 0xFF;
+    tx_buf->msg_data[tx_buf->msg_length++] = crc >> 8;
+    return MB_OK;
+}
+
 //
 // uint8_t prepare_tx_msg(union message *rx_msg, union message *tx_msg,
 // uint16_t *data)

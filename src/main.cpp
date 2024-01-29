@@ -8,6 +8,10 @@
 
 #include "modbus.h"
 
+void periodicUpdateSensors(void);
+void requestAmbientLightValue(void);
+void requestCurrentLampStatus(void);
+void requestCurrentLampMode(void);
 //
 HardwareSerial &Debug = Serial;
 HardwareSerial &Modbus = Serial1;
@@ -26,7 +30,9 @@ const int ledPin2 = 13;
 const int ledPin3 = 14;
 
 UART_message buffer1;
+UART_message buffer2;
 UART_message *rxBuffer = &buffer1;
+UART_message *txBuffer = &buffer1;
 // char rxBuffer[32] = {0};
 
 String message = "";
@@ -218,6 +224,24 @@ void processOnReceiving(HardwareSerial &Serial)
   // }
 }
 
+void mb_buf_print(UART_message *msg)
+{
+  modbus_status_t status = msg_validate(txBuffer);
+  if (status == MB_OK)
+  {
+    Debug.println("Message valid");
+  }
+  else
+  {
+    Debug.println("Message ivalid");
+  }
+  for (uint8_t i = 0; i < txBuffer->msg_length; i++)
+  {
+    Debug.printf("[0x%02X] ", txBuffer->msg_data[i]);
+  }
+  Debug.println();
+}
+
 void setup()
 {
   Debug.begin(115200);
@@ -259,6 +283,54 @@ void loop()
   ledcWrite(ledChannel1, dutyCycle1);
   ledcWrite(ledChannel2, dutyCycle2);
   ledcWrite(ledChannel3, dutyCycle3);
-
+  periodicUpdateSensors();
   ws.cleanupClients();
+}
+
+void periodicUpdateSensors(void)
+{
+  static unsigned long previousMillis = 0;
+  static uint8_t queue = 0;
+  unsigned long interval = 3000;
+  unsigned long step = 500;
+  unsigned long currentMillis = millis();
+  if ((currentMillis - previousMillis >= interval && queue == 0) || (currentMillis - previousMillis >= step && queue != 0))
+  {
+    switch (queue)
+    {
+    case 0:
+      requestAmbientLightValue();
+      break;
+    case 1:
+      requestCurrentLampStatus();
+      break;
+    case 2:
+      requestCurrentLampMode();
+      break;
+    }
+    queue++;
+    if (queue > 2)
+    {
+      queue = 0;
+    }
+    previousMillis = currentMillis;
+  }
+}
+
+void requestAmbientLightValue(void)
+{
+  Debug.printf("Request ambient light at:       %u\n", millis());
+  prepare_request_registers(0x01, 0x01, 0x0100, 0x0001, txBuffer);
+  mb_buf_print(txBuffer);
+  Modbus.write(txBuffer->msg_data, txBuffer->msg_length);
+}
+
+void requestCurrentLampStatus(void)
+{
+  Debug.printf("Request current light status at:%u\n", millis());
+}
+
+void requestCurrentLampMode(void)
+{
+  Debug.printf("Request current light mode at:  %u\n", millis());
 }
