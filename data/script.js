@@ -10,12 +10,12 @@ function onload(event) {
 }
 
 function getValues() {
-    console.log('->getValues');
+    console.log('Web->HMI getValues');
     websocket.send("getValues");
 }
 
 function initWebSocket() {
-    console.log('Trying to open a WebSocket connection…');
+    console.log('Trying to open a WebSocket connection...');
     websocket = new WebSocket(gateway);
     websocket.onopen = onOpen;
     websocket.onclose = onClose;
@@ -35,13 +35,13 @@ function onClose(event) {
 function updateThreshold(element) {
     document.getElementById("threshold").innerHTML = element.value;
     document.getElementById("thresholdValue").innerHTML = element.value;
-    console.log("->threshold=" + element.value);
+    console.log("Web->HMI threshold=" + element.value);
     websocket.send("threshold=" + element.value);
 }
 
 function updateWorkMode(element) {
     document.getElementById("workModeValue").innerHTML = mode[element.value];
-    console.log("->mode=" + element.value);
+    console.log("Web->HMI mode=" + element.value);
     websocket.send("mode=" + element.value);
 }
 
@@ -56,12 +56,12 @@ function updateLamp1(element) {
     //     document.getElementById("lamp").style = "font-size:64px;color:yellow"
     // }
     document.getElementById("lamp").style = "font-size:64px;color:grey"
-    console.log("->lampSwitch")
+    console.log("Web->HMI lampSwitch")
     websocket.send("LampSwitch")
 }
 
 function onMessage(event) {
-    console.log("<-" + event.data);
+    console.log("Web<-HMI" + event.data);
     var data = JSON.parse(event.data);
     document.getElementById("workMode").value = data.mode;
     document.getElementById("workModeValue").innerHTML = mode[data.mode];

@@ -382,13 +382,42 @@ modbus_status_t prepare_request_registers(MODBUS_message *request, UART_message 
 
 modbus_status_t response_processing(MODBUS_message *response, MODBUS_message *request, MODBUS_registers *registers)
 {
-    if(response->device_address!=request->device_address)
+    if (response->device_address != request->device_address)
     {
         return WRONG_ADDRESS;
     }
-    if(response->command!=request->command)
+    if (response->command != request->command)
     {
         return WRONG_COMMAND;
+    }
+    if (response->command == (request->command) | 0x80)
+    {
+        return WRONG_REGISTER;
+    }
+    switch (response->command)
+    {
+    case READ_DO:
+        break;
+    case READ_DI:
+        break;
+    case READ_AO:
+        break;
+    case READ_AI:
+        break;
+    case WRITE_DO:
+        break;
+    case WRITE_AO:
+        break;
+    case READ_EXCEPTION:
+        break;
+    case DIAGNOSTIC:
+        break;
+    case WRITE_DO_MULTI:
+        break;
+    case WRITE_AO_MULTI:
+        break;
+    default:
+        return MB_OK;
     }
     return MB_OK;
 }

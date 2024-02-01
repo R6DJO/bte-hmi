@@ -13,7 +13,7 @@
 
 extern HardwareSerial &Debug;
 
-void initFS();
-void initWiFi();
+void initFS(void);
+void initWiFi(void);
 
 #endif /* INC_INIT_H_ */

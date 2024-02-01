@@ -23,7 +23,8 @@ typedef enum
 	MB_ERR,
 	MB_OK,
 	WRONG_ADDRESS,
-	WRONG_COMMAND
+	WRONG_COMMAND,
+	WRONG_REGISTER
 } modbus_status_t;
 
 typedef enum

@@ -1,11 +1,8 @@
 #define DEBUG
+
 #include <Arduino.h>
-// #include "SPIFFS.h"
-#include <Arduino_JSON.h>
-// #include <ArduinoJson.h>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
-// #include <WiFi.h>
 
 #include "init.h"
 #include "modbus.h"
@@ -31,6 +28,9 @@ UART_message buffer2;
 UART_message *rxBuffer = &buffer1;
 UART_message *txBuffer = &buffer1;
 
+char buffer3[64];
+char *wsJSON = buffer3;
+
 // Modbus MSG recived flag
 volatile uint8_t mb_msg_rxd = false;
 MODBUS_message rx_msg;
@@ -41,12 +41,6 @@ MODBUS_registers LCU_registers;
 // AO[1] - light threshold
 // DO[0].0 - mode 1-automatic/0-manual
 // DO[1].0 - light 1-on/0-off
-
-String message = "";
-
-// Json Variable to Hold Slider Values
-// JSONVar sliderValues;
-JSONVar lampConfig;
 
 // Lamp data
 typedef struct Lamp
@@ -59,20 +53,9 @@ typedef struct Lamp
 
 Lamp lamp = {1, 66, 0, 33};
 
-String getData()
+void generateJSON()
 {
-  lampConfig["mode"] = lamp.mode;
-  lampConfig["threshold"] = lamp.threshold;
-  lampConfig["status"] = lamp.current_status;
-  lampConfig["ambient_light"] = lamp.ambient_light;
-  String jsonString = JSON.stringify(lampConfig);
-  return jsonString;
-}
-
-void notifyClients(String Message)
-{
-  Debug.printf("HMI-->Usr: %s\n", Message.c_str());
-  ws.textAll(Message);
+  sprintf(wsJSON, "{\"mode\":%d,\"threshold\":%d,\"status\":%d,\"ambient_light\":%d}", lamp.mode, lamp.threshold, lamp.current_status, lamp.ambient_light);
 }
 
 void handleWebSocketMessage(void *arg, uint8_t *data, size_t len)
@@ -82,38 +65,40 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len)
       info->opcode == WS_TEXT)
   {
     data[len] = 0;
-    message = (char *)data;
-    if (message.indexOf("threshold") >= 0)
+    if (strncmp((const char *)data, "threshold", 9) == 0)
     {
-      uint8_t value = message.substring(10).toInt();
+      uint8_t value = atoi((const char *)data + 10);
       Debug.printf("HMI<--USR threshold=%u\n", value);
-      // Debug.println(value);
       lamp.threshold = value;
-      notifyClients(getData());
+      generateJSON();
+      ws.textAll(wsJSON);
     }
-    if (message.indexOf("mode") >= 0)
+    if (strncmp((const char *)data, "mode", 4) == 0)
     {
-      uint8_t value = message.substring(5).toInt();
+      uint8_t value = atoi((const char *)data + 5);
       Debug.printf("HMI<--Usr mode=%d\n", value);
-      // Debug.println(value);
       lamp.mode = value;
-      notifyClients(getData());
+      generateJSON();
+      ws.textAll(wsJSON);
     }
     if (strcmp((char *)data, "getValues") == 0)
     {
       Debug.printf("HMI<--Usr getValues\n");
-      notifyClients(getData());
+      generateJSON();
+      ws.textAll(wsJSON);
     }
     if (strcmp((char *)data, "lampSwitch") == 0)
     {
       Debug.println("HMI<--Usr lampSwitch");
       lamp.current_status = (!lamp.current_status);
-      notifyClients(getData());
+      generateJSON();
+      ws.textAll(wsJSON);
     }
   }
 }
-void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
-             AwsEventType type, void *arg, uint8_t *data, size_t len)
+
+void WSonEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
+               AwsEventType type, void *arg, uint8_t *data, size_t len)
 {
   switch (type)
   {
@@ -131,12 +116,6 @@ void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
   case WS_EVT_ERROR:
     break;
   }
-}
-
-void initWebSocket()
-{
-  ws.onEvent(onEvent);
-  server.addHandler(&ws);
 }
 
 // General callback function for any UART -- used with a lambda std::function within HardwareSerial::onReceive()
@@ -159,16 +138,21 @@ void processOnReceiving(HardwareSerial &Serial)
     Debug.println("HMI: This is not a know Arduino Serial# object...");
     return;
   }
+#ifdef DEBUG
   Debug.printf("\nHMI: OnReceive Callback --> Received Data from UART%d\n"
                "Received %d bytes\nFirst byte is '%c' [0x%02x]\n",
                uart_num, Serial.available(), Serial.peek(), Serial.peek());
+#endif
   uint8_t charPerLine = 0;
   rxBuffer->msg_length = Serial.read(rxBuffer->msg_data, 31);
   rxBuffer->msg_data[rxBuffer->msg_length] = '\0';
 #ifdef DEBUG
   mb_buf_print(rxBuffer);
 #endif
-  mb_msg_rxd = true;
+  if (uart_num == 1)
+  {
+    mb_msg_rxd = true;
+  }
 }
 
 void mb_buf_print(UART_message *msg)
@@ -189,6 +173,16 @@ void mb_buf_print(UART_message *msg)
   Debug.println();
 }
 
+void initWebServer()
+{
+  ws.onEvent(WSonEvent);
+  server.addHandler(&ws);
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
+            { request->send(SPIFFS, "/index.html", "text/html"); });
+  server.serveStatic("/", SPIFFS, "/");
+  server.begin();
+}
+
 void setup()
 {
   // Add callback for UART RX
@@ -201,17 +195,7 @@ void setup()
 
   initFS();
   initWiFi();
-
-  initWebSocket();
-
-  // Web Server Root URL
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
-            { request->send(SPIFFS, "/index.html", "text/html"); });
-
-  server.serveStatic("/", SPIFFS, "/");
-
-  // Start server
-  server.begin();
+  initWebServer();
 
   LCU_registers.MB_address = 0x01;
 }
@@ -233,6 +217,7 @@ void loop()
 
 void periodicUpdateSensors(void)
 {
+  // опрос регистров по очереди с паузами 3000 - 500 - 500 - 3000...
   static unsigned long previousMillis = 0;
   static uint8_t queue = 0;
   unsigned long interval = 3000;
@@ -263,7 +248,9 @@ void periodicUpdateSensors(void)
 
 void requestAmbientLightValue(void)
 {
+#ifdef DEBUG
   Debug.printf("Request ambient light at:       %u\n", millis());
+#endif
   mb_request.device_address = 0x01;
   mb_request.command = 0x01;
   mb_request.start_address = 0x0100;
@@ -277,7 +264,9 @@ void requestAmbientLightValue(void)
 
 void requestCurrentLampStatus(void)
 {
+#ifdef DEBUG
   Debug.printf("Request current light status at:%u\n", millis());
+#endif
   mb_request.device_address = 0x01;
   mb_request.command = 0x02;
   mb_request.start_address = 0x0100;
@@ -291,7 +280,9 @@ void requestCurrentLampStatus(void)
 
 void requestCurrentLampMode(void)
 {
+#ifdef DEBUG
   Debug.printf("Request current light mode at:  %u\n", millis());
+#endif
   mb_request.device_address = 0x01;
   mb_request.command = 0x03;
   mb_request.start_address = 0x0100;
