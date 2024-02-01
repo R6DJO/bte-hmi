@@ -76,11 +76,14 @@ typedef struct MODBUS_registers
 	uint8_t MB_address;
 } MODBUS_registers;
 
+// MODBUS-master/slave function
 uint16_t MODBUS_CRC16(const uint8_t *nData, uint16_t wLength);
 uint16_t CRC16(const uint8_t *nData, uint16_t wLength);
 // char * itoalz(char *buf, uint8_t value);
 // uint8_t hex2int(char buf);
 modbus_status_t msg_validate(UART_message *);
+
+// ToDo maybe slave function...
 modbus_status_t msg_parse(UART_message *, MODBUS_message *);
 
 // MODBUS-slave functions
@@ -90,8 +93,8 @@ modbus_status_t response_prepare(MODBUS_message *, MODBUS_registers *,
 								 UART_message *);
 
 // MODBUS-master functions
-modbus_status_t prepare_request_registers(uint8_t device_address, uint8_t command, uint16_t start_address, uint16_t count, UART_message *);
-modbus_status_t prepare_request_registers(MODBUS_message *request, UART_message *uart_request);
+modbus_status_t prepare_request_mbmsg(uint8_t device_address, uint8_t command, uint16_t start_address, uint16_t count, UART_message *);
+modbus_status_t prepare_request_mbmsg(MODBUS_message *request, UART_message *uart_request);
 modbus_status_t response_processing(MODBUS_message *response, MODBUS_message *wait_responce, MODBUS_registers *registers);
 
 // modbus_status_t prepare_request_registers(uint8_t device_address,uint16_t start_address,uint16_t count,UART_message*);

@@ -7,11 +7,11 @@ void initFS()
 {
     if (!SPIFFS.begin())
     {
-        Debug.println("HMI: An error has occurred while mounting SPIFFS");
+        debug.println("HMI: An error has occurred while mounting SPIFFS");
     }
     else
     {
-        Debug.println("HMI: SPIFFS mounted successfully");
+        debug.println("HMI: SPIFFS mounted successfully");
     }
 }
 

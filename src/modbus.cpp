@@ -349,7 +349,7 @@ modbus_status_t response_prepare(MODBUS_message *rx_msg, MODBUS_registers *regis
     return MB_OK;
 }
 
-modbus_status_t prepare_request_registers(uint8_t device_address, uint8_t command, uint16_t start_address,
+modbus_status_t prepare_request_mbmsg(uint8_t device_address, uint8_t command, uint16_t start_address,
                                           uint16_t count, UART_message *tx_buf)
 {
     tx_buf->msg_length = 0;
@@ -365,7 +365,7 @@ modbus_status_t prepare_request_registers(uint8_t device_address, uint8_t comman
     return MB_OK;
 }
 
-modbus_status_t prepare_request_registers(MODBUS_message *request, UART_message *tx_buf)
+modbus_status_t prepare_request_mbmsg(MODBUS_message *request, UART_message *tx_buf)
 {
     tx_buf->msg_length = 0;
     tx_buf->msg_data[tx_buf->msg_length++] = request->device_address;

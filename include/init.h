@@ -11,7 +11,7 @@
 #include "SPIFFS.h"
 #include <WiFi.h>
 
-extern HardwareSerial &Debug;
+extern HardwareSerial &debug;
 
 void initFS(void);
 void initWiFi(void);
