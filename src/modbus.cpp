@@ -5,6 +5,9 @@
  *      Author: r6djo
  */
 
+// This is a personal academic project. Dear PVS-Studio, please check it.
+// PVS-Studio Static Code Analyzer for C, C++, C#, and Java: https://pvs-studio.com
+
 #include "modbus.h"
 
 uint16_t MODBUS_CRC16(const uint8_t *nData, uint16_t wLength)
@@ -33,15 +36,25 @@ uint16_t MODBUS_CRC16(const uint8_t *nData, uint16_t wLength)
             val.u8[0] ^= 0x80;
         }
         if ((val.u8[1] & 0x04) != 0)
+        {
             val.u8[1] ^= 0x09;
+        }
         if ((val.u8[1] & 0x08) != 0)
+        {
             val.u8[1] ^= 0x12;
+        }
         if ((val.u8[1] & 0x10) != 0)
+        {
             val.u8[1] ^= 0x24;
+        }
         if ((val.u8[1] & 0x20) != 0)
+        {
             val.u8[1] ^= 0x48;
+        }
         if ((val.u8[1] & 0x40) != 0)
+        {
             val.u8[1] ^= 0x90;
+        }
         if ((val.u8[1] & 0x80) != 0)
         {
             val.u8[1] ^= 0x20;
@@ -89,11 +102,17 @@ uint16_t CRC16(const uint8_t *nData, uint16_t wLength)
 uint8_t hex2int(char buf)
 {
     if (buf >= '0' && buf <= '9')
+    {
         return buf - '0';
+    }
     if (buf >= 'a' && buf <= 'f')
+    {
         return buf - 'a' + 10;
+    }
     if (buf >= 'A' && buf <= 'F')
+    {
         return buf - 'A' + 10;
+    }
     return 0;
 }
 
@@ -153,7 +172,7 @@ modbus_status_t msg_parse(UART_message *buf, MODBUS_message *rx_msg)
     return MB_OK;
 }
 
-modbus_status_t address_validate(MODBUS_message *rx_msg, MODBUS_registers *registers)
+modbus_status_t address_validate(const MODBUS_message *rx_msg, const MODBUS_registers *registers)
 {
     switch (rx_msg->command)
     {
@@ -326,20 +345,10 @@ modbus_status_t response_prepare(MODBUS_message *rx_msg, MODBUS_registers *regis
     }
     else
     {
-        switch (rx_msg->command)
-        {
-        case READ_DO:
-        case READ_DI:
-        case READ_AO:
-        case READ_AI:
-        case WRITE_DO:
-        case WRITE_AO:
-        case WRITE_DO_MULTI:
-        case WRITE_AO_MULTI:
-            tx_buf->msg_data[1] = rx_msg->command | 0x80;
-            tx_buf->msg_data[2] = 0x02;
-            tx_buf->msg_length = 3;
-        }
+
+        tx_buf->msg_data[1] = rx_msg->command | 0x80;
+        tx_buf->msg_data[2] = 0x02;
+        tx_buf->msg_length = 3;
     }
 
     uint16_t crc = MODBUS_CRC16(tx_buf->msg_data, tx_buf->msg_length);
@@ -350,7 +359,7 @@ modbus_status_t response_prepare(MODBUS_message *rx_msg, MODBUS_registers *regis
 }
 
 modbus_status_t prepare_request_mbmsg(uint8_t device_address, uint8_t command, uint16_t start_address,
-                                          uint16_t count, UART_message *tx_buf)
+                                      uint16_t count, UART_message *tx_buf)
 {
     tx_buf->msg_length = 0;
     tx_buf->msg_data[tx_buf->msg_length++] = device_address;
@@ -365,7 +374,7 @@ modbus_status_t prepare_request_mbmsg(uint8_t device_address, uint8_t command, u
     return MB_OK;
 }
 
-modbus_status_t prepare_request_mbmsg(MODBUS_message *request, UART_message *tx_buf)
+modbus_status_t prepare_request_mbmsg(const MODBUS_message *request, UART_message *tx_buf)
 {
     tx_buf->msg_length = 0;
     tx_buf->msg_data[tx_buf->msg_length++] = request->device_address;
@@ -380,7 +389,7 @@ modbus_status_t prepare_request_mbmsg(MODBUS_message *request, UART_message *tx_
     return MB_OK;
 }
 
-modbus_status_t response_processing(MODBUS_message *response, MODBUS_message *request, MODBUS_registers *registers)
+modbus_status_t response_processing(const MODBUS_message *response, const MODBUS_message *request, MODBUS_registers *registers)
 {
     if (response->device_address != request->device_address)
     {
@@ -390,7 +399,7 @@ modbus_status_t response_processing(MODBUS_message *response, MODBUS_message *re
     {
         return WRONG_COMMAND;
     }
-    if (response->command == (request->command) | 0x80)
+    if (response->command == (request->command + 0x80))
     {
         return WRONG_REGISTER;
     }

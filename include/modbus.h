@@ -94,8 +94,8 @@ modbus_status_t response_prepare(MODBUS_message *, MODBUS_registers *,
 
 // MODBUS-master functions
 modbus_status_t prepare_request_mbmsg(uint8_t device_address, uint8_t command, uint16_t start_address, uint16_t count, UART_message *);
-modbus_status_t prepare_request_mbmsg(MODBUS_message *request, UART_message *uart_request);
-modbus_status_t response_processing(MODBUS_message *response, MODBUS_message *wait_responce, MODBUS_registers *registers);
+modbus_status_t prepare_request_mbmsg(const MODBUS_message *request, UART_message *uart_request);
+modbus_status_t response_processing(const MODBUS_message *response, const MODBUS_message *wait_responce, MODBUS_registers *registers);
 
 // modbus_status_t prepare_request_registers(uint8_t device_address,uint16_t start_address,uint16_t count,UART_message*);
 // uint8_t prepare_tx_msg(union message *rx_msg, union message *tx_msg, uint16_t *data);

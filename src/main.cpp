@@ -1,17 +1,10 @@
+// This is a personal academic project. Dear PVS-Studio, please check it.
+// PVS-Studio Static Code Analyzer for C, C++, C#, and Java: https://pvs-studio.com
 #define DEBUG
 
-#include <Arduino.h>
-#include <AsyncTCP.h>
-#include <ESPAsyncWebServer.h>
-
+#include "main.h"
 #include "init.h"
-#include "modbus.h"
 
-void mb_buf_print(UART_message *msg);
-void periodicUpdateSensors(void);
-void requestAmbientLightValue(void);
-void requestCurrentLampStatus(void);
-void requestCurrentLampMode(void);
 
 // UART objects
 HardwareSerial &debug = Serial;
@@ -29,7 +22,8 @@ UART_message *rxBuffer = &uart_buffer1;
 UART_message *txBuffer = &uart_buffer1;
 
 // Buffer for JSON from HMI to Web-client
-char wsJSON[64];
+char buffer[64];
+char *wsJSON=buffer;
 
 // Modbus MSG recived flag
 volatile uint8_t mb_msg_rxd = false;
@@ -52,6 +46,14 @@ typedef struct Lamp
 } Lamp;
 
 Lamp lamp = {1, 66, 0, 33};
+
+void mb_buf_print(UART_message *msg);
+void periodicUpdateSensors(void);
+void requestAmbientLightValue(void);
+void requestCurrentLampStatus(void);
+void requestCurrentLampMode(void);
+
+
 
 void generateJSON()
 {
@@ -218,11 +220,11 @@ void loop()
 void periodicUpdateSensors(void)
 {
   // опрос регистров по очереди с паузами 3000 - 500 - 500 - 3000...
-  static unsigned long previousMillis = 0;
+  static uint64_t previousMillis = 0;
   static uint8_t queue = 0;
-  unsigned long interval = 3000;
-  unsigned long step = 500;
-  unsigned long currentMillis = millis();
+  uint64_t interval = 3000;
+  uint64_t step = 500;
+  uint64_t currentMillis = millis();
   if ((currentMillis - previousMillis >= interval && queue == 0) || (currentMillis - previousMillis >= step && queue != 0))
   {
     switch (queue)

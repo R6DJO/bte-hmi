@@ -8,8 +8,8 @@
 #ifndef INC_INIT_H_
 #define INC_INIT_H_
 
-#include "SPIFFS.h"
 #include <WiFi.h>
+#include <SPIFFS.h>
 
 extern HardwareSerial &debug;
 
