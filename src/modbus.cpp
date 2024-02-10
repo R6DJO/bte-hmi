@@ -358,22 +358,6 @@ modbus_status_t response_prepare(MODBUS_message *rx_msg, MODBUS_registers *regis
     return MB_OK;
 }
 
-modbus_status_t prepare_request_mbmsg(uint8_t device_address, uint8_t command, uint16_t start_address,
-                                      uint16_t count, UART_message *tx_buf)
-{
-    tx_buf->msg_length = 0;
-    tx_buf->msg_data[tx_buf->msg_length++] = device_address;
-    tx_buf->msg_data[tx_buf->msg_length++] = command;
-    tx_buf->msg_data[tx_buf->msg_length++] = start_address >> 8;
-    tx_buf->msg_data[tx_buf->msg_length++] = start_address & 0xFF;
-    tx_buf->msg_data[tx_buf->msg_length++] = count >> 8;
-    tx_buf->msg_data[tx_buf->msg_length++] = count & 0xFF;
-    uint16_t crc = MODBUS_CRC16(tx_buf->msg_data, tx_buf->msg_length);
-    tx_buf->msg_data[tx_buf->msg_length++] = crc & 0xFF;
-    tx_buf->msg_data[tx_buf->msg_length++] = crc >> 8;
-    return MB_OK;
-}
-
 modbus_status_t prepare_request_mbmsg(const MODBUS_message *request, UART_message *tx_buf)
 {
     tx_buf->msg_length = 0;
@@ -457,15 +441,6 @@ modbus_status_t response_processing(const MODBUS_message *response, const MODBUS
 //        tx_msg->msg.data[i] = data[i + offset];
 //    }
 //    return 1;
-//}
-//
-// char *itoalz(char *buf, uint8_t value)
-//{
-//	char tmp[3];
-//    if (value <= 0x0F)
-//        strcat(buf, "0");
-//    strcat(buf, itoa(value, tmp, 16));
-//    return buf;
 //}
 //
 // void prepare_tx_buf(union message *tx_msg, uint8_t *tx_buf)

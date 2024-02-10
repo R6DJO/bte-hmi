@@ -87,13 +87,12 @@ modbus_status_t msg_validate(UART_message *);
 modbus_status_t msg_parse(UART_message *, MODBUS_message *);
 
 // MODBUS-slave functions
-modbus_status_t address_validate(MODBUS_message *rx_msg,
-								 MODBUS_registers *registers);
+modbus_status_t address_validate(const MODBUS_message *rx_msg, const MODBUS_registers *registers);
 modbus_status_t response_prepare(MODBUS_message *, MODBUS_registers *,
 								 UART_message *);
 
 // MODBUS-master functions
-modbus_status_t prepare_request_mbmsg(uint8_t device_address, uint8_t command, uint16_t start_address, uint16_t count, UART_message *);
+// modbus_status_t prepare_request_mbmsg(uint8_t device_address, uint8_t command, uint16_t start_address, uint16_t count, UART_message *);
 modbus_status_t prepare_request_mbmsg(const MODBUS_message *request, UART_message *uart_request);
 modbus_status_t response_processing(const MODBUS_message *response, const MODBUS_message *wait_responce, MODBUS_registers *registers);
 
