@@ -25,7 +25,7 @@ UART_message *txBuffer = &uart_buffer1;
 
 // Buffer for JSON from HMI to Web-client
 char buffer[64];
-char *wsJSON=buffer;
+char *wsJSON = buffer;
 
 // Modbus MSG recived flag
 volatile uint8_t mb_msg_rxd = false;
@@ -33,10 +33,14 @@ MODBUS_message rx_response;
 MODBUS_message mb_request;
 MODBUS_registers LCU_registers;
 // LCU_registers.MB_address = 0x01;
-// AI[0] - current light level
-// AO[1] - light threshold
 // DO[0].0 - mode 1-automatic/0-manual
 // DO[1].0 - light 1-on/0-off
+// AI[0] - current light level
+// AO[1] - light threshold
+// LCU_registers.DO_start_address = 0x0100;
+// LCU_registers.DI_start_address = 0x0200;
+// LCU_registers.AO_start_address = 0x0300;
+// LCU_registers.AI_start_address = 0x0400;
 
 // Lamp data
 typedef struct Lamp
@@ -54,8 +58,6 @@ void periodicUpdateSensors(void);
 void requestAmbientLightValue(void);
 void requestCurrentLampStatus(void);
 void requestCurrentLampMode(void);
-
-
 
 void generateJSON()
 {
@@ -143,11 +145,11 @@ void processOnReceiving(HardwareSerial &Serial)
     debug.println("HMI: This is not a know Arduino Serial# object...");
     return;
   }
-// #ifdef DEBUG
-//   debug.printf("\nHMI: OnReceive Callback --> Received Data from UART%d\n"
-//                "Received %d bytes\nFirst byte is '%c' [0x%02x]\n",
-//                uart_num, Serial.available(), Serial.peek(), Serial.peek());
-// #endif
+  // #ifdef DEBUG
+  //   debug.printf("\nHMI: OnReceive Callback --> Received Data from UART%d\n"
+  //                "Received %d bytes\nFirst byte is '%c' [0x%02x]\n",
+  //                uart_num, Serial.available(), Serial.peek(), Serial.peek());
+  // #endif
   // uint8_t charPerLine = 0;
   rxBuffer->msg_length = Serial.read(rxBuffer->msg_data, 31);
   rxBuffer->msg_data[rxBuffer->msg_length] = '\0';
@@ -162,30 +164,40 @@ void processOnReceiving(HardwareSerial &Serial)
 
 void mb_buf_print(UART_message *msg)
 {
-  modbus_status_t status = msg_validate(msg);
+  // modbus_status_t status = msg_validate(msg);
   debug.print("[ ");
   for (uint8_t i = 0; i < msg->msg_length; i++)
   {
     debug.printf("0x%02X ", msg->msg_data[i]);
   }
-  if (status == MB_OK)
-  {
-    debug.println("] Message CRC valid");
-  }
-  else
-  {
-    debug.println("] Message CRC ivalid");
-  }
+  debug.println("]");
+  // if (status == MB_OK)
+  // {
+  //   debug.println("] Message CRC valid");
+  // }
+  // else
+  // {
+  //   debug.println("] Message CRC ivalid");
+  // }
+}
+
+void debug_print(const char *msg)
+{
+  unsigned long time = millis();
+  unsigned long min = (time / 1000) / 60;
+  unsigned long sec = (time / 1000) % 60;
+  unsigned long dsec = (time) % 1000;
+  debug.printf("%s at %d:%02d.%03d\n", msg, min, sec, dsec);
 }
 
 void hex_to_string(uint8_t *buffer, uint8_t size, char *result)
 {
-    sprintf(result, "[ ");
-    for (int i = 0; i < size; i++)
-    {
-        sprintf(result + i * 5 + 2, "0x%02X ", buffer[i]);
-    }
-    strcat(result, "]");
+  sprintf(result, "[ ");
+  for (int i = 0; i < size; i++)
+  {
+    sprintf(result + i * 5 + 2, "0x%02X ", buffer[i]);
+  }
+  strcat(result, "]");
 }
 
 void initWebServer()
@@ -206,7 +218,8 @@ void setup()
                   { processOnReceiving(debug); });
   modbus.begin(9600);
   modbus.onReceive([]()
-                   { processOnReceiving(modbus); }, true);
+                   { processOnReceiving(modbus); },
+                   true);
 
   initFS();
   initWiFi();
@@ -224,6 +237,7 @@ void loop()
     {
       msg_parse(rxBuffer, &rx_response);
       response_processing(&rx_response, &mb_request, &LCU_registers);
+
     }
   }
   periodicUpdateSensors();
@@ -235,7 +249,7 @@ void periodicUpdateSensors(void)
   // опрос регистров по очереди с паузами 3000 - 500 - 500 - 3000 ms...
   static uint64_t previousMillis = 0;
   static uint8_t queue = 0;
-  uint64_t interval = 3000;
+  uint64_t interval = 9000;
   uint64_t step = 500;
   uint64_t currentMillis = millis();
   if ((currentMillis - previousMillis >= interval && queue == 0) || (currentMillis - previousMillis >= step && queue != 0))
@@ -264,52 +278,49 @@ void periodicUpdateSensors(void)
 void requestAmbientLightValue(void)
 {
 #ifdef DEBUG
-  debug.printf("Request ambient light at:       %u\n", millis());
+  debug_print("HMI: Request ambient light");
 #endif
   mb_request.device_address = 0x01;
-  mb_request.command = 0x01;
-  mb_request.start_address = 0x0100;
-  mb_request.data_length = 0x0001;
+  mb_request.command = READ_AI;
+  mb_request.start_address = 0x0400;
+  mb_request.data_length = 0x0004;
   prepare_request_mbmsg(&mb_request, txBuffer);
-// #ifdef DEBUG
-//   mb_buf_print(txBuffer);
-// #endif
+#ifdef DEBUG
+  mb_buf_print(txBuffer);
+#endif
   modbus.write(txBuffer->msg_data, txBuffer->msg_length);
-  // modbus.println("Hello1\n");
 }
 
 void requestCurrentLampStatus(void)
 {
 #ifdef DEBUG
-  debug.printf("Request current light status at:%u\n", millis());
+  debug_print("HMI: Request current light status");
 #endif
   mb_request.device_address = 0x01;
   mb_request.command = 0x02;
   mb_request.start_address = 0x0100;
   mb_request.data_length = 0x0001;
   prepare_request_mbmsg(&mb_request, txBuffer);
-// #ifdef DEBUG
-//   mb_buf_print(txBuffer);
-// #endif
+#ifdef DEBUG
+  mb_buf_print(txBuffer);
+#endif
   modbus.write(txBuffer->msg_data, txBuffer->msg_length);
-  // modbus.println("Hello2\n");
 }
 
 void requestCurrentLampMode(void)
 {
 #ifdef DEBUG
-  debug.printf("Request current light mode at:  %u\n", millis());
+  debug_print("HMI: Request current light mode");
 #endif
   mb_request.device_address = 0x01;
   mb_request.command = READ_AO;
   mb_request.start_address = 0x0300;
   mb_request.data_length = 0x0001;
   prepare_request_mbmsg(&mb_request, txBuffer);
-// #ifdef DEBUG
-//   mb_buf_print(txBuffer);
-// #endif
+#ifdef DEBUG
+  mb_buf_print(txBuffer);
+#endif
   modbus.write(txBuffer->msg_data, txBuffer->msg_length);
-  // modbus.println("Hello3\n");
 }
 
 // void response_processing(MODBUS_message *response, MODBUS_registers *LCU_registers)

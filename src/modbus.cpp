@@ -252,8 +252,8 @@ modbus_status_t response_prepare(MODBUS_message *rx_msg, MODBUS_registers *regis
         return WRONG_ADDRESS;
     }
     tx_buf->msg_length = 0;
-    modbus_status_t adreess_is_valid = address_validate(rx_msg, registers);
-    if (adreess_is_valid)
+    modbus_status_t adress_is_valid = address_validate(rx_msg, registers);
+    if (adress_is_valid)
     {
         tx_buf->msg_data[tx_buf->msg_length++] = registers->MB_address;
         tx_buf->msg_data[tx_buf->msg_length++] = rx_msg->command;
@@ -261,42 +261,38 @@ modbus_status_t response_prepare(MODBUS_message *rx_msg, MODBUS_registers *regis
         {
         case READ_DO:
             tx_buf->msg_data[tx_buf->msg_length++] = rx_msg->data_length << 1;
+            shift = rx_msg->start_address - registers->DO_start_address;
             for (uint16_t i = 0; i < rx_msg->data_length; i++)
             {
-                tx_buf->msg_data[tx_buf->msg_length++] =
-                    registers->DO[rx_msg->start_address - registers->DO_start_address + i] >> 8;
-                tx_buf->msg_data[tx_buf->msg_length++] =
-                    registers->DO[rx_msg->start_address - registers->DO_start_address + i] & 0xFF;
+                tx_buf->msg_data[tx_buf->msg_length++] = registers->DO[shift + i] >> 8;
+                tx_buf->msg_data[tx_buf->msg_length++] = registers->DO[shift + i] & 0xFF;
             }
             break;
         case READ_DI:
             tx_buf->msg_data[tx_buf->msg_length++] = rx_msg->data_length << 1;
+            shift = rx_msg->start_address - registers->DI_start_address;            
             for (uint16_t i = 0; i < rx_msg->data_length; i++)
             {
-                tx_buf->msg_data[tx_buf->msg_length++] =
-                    registers->DI[rx_msg->start_address - registers->DO_start_address] >> 8;
-                tx_buf->msg_data[tx_buf->msg_length++] =
-                    registers->DI[rx_msg->start_address - registers->DO_start_address] & 0xFF;
+                tx_buf->msg_data[tx_buf->msg_length++] = registers->DI[shift + i] >> 8;
+                tx_buf->msg_data[tx_buf->msg_length++] = registers->DI[shift + i] & 0xFF;
             }
             break;
         case READ_AO:
             tx_buf->msg_data[tx_buf->msg_length++] = rx_msg->data_length << 1;
+            shift = rx_msg->start_address - registers->AO_start_address;
             for (uint16_t i = 0; i < rx_msg->data_length; i++)
             {
-                tx_buf->msg_data[tx_buf->msg_length++] =
-                    registers->AO[rx_msg->start_address - registers->AO_start_address] >> 8;
-                tx_buf->msg_data[tx_buf->msg_length++] =
-                    registers->AO[rx_msg->start_address - registers->AO_start_address] & 0xFF;
+                tx_buf->msg_data[tx_buf->msg_length++] = registers->AO[shift + i] >> 8;
+                tx_buf->msg_data[tx_buf->msg_length++] = registers->AO[shift + i] & 0xFF;
             }
             break;
         case READ_AI:
             tx_buf->msg_data[tx_buf->msg_length++] = rx_msg->data_length << 1;
+            shift = rx_msg->start_address - registers->AI_start_address;
             for (uint16_t i = 0; i < rx_msg->data_length; i++)
             {
-                tx_buf->msg_data[tx_buf->msg_length++] =
-                    registers->AI[rx_msg->start_address - registers->AI_start_address] >> 8;
-                tx_buf->msg_data[tx_buf->msg_length++] =
-                    registers->AI[rx_msg->start_address - registers->AI_start_address] & 0xFF;
+                tx_buf->msg_data[tx_buf->msg_length++] = registers->AI[shift + i] >> 8;
+                tx_buf->msg_data[tx_buf->msg_length++] = registers->AI[shift + i] & 0xFF;
             }
             break;
         case WRITE_DO:
@@ -375,6 +371,7 @@ modbus_status_t prepare_request_mbmsg(const MODBUS_message *request, UART_messag
 
 modbus_status_t response_processing(const MODBUS_message *response, const MODBUS_message *request, MODBUS_registers *registers)
 {
+    uint16_t shift;
     if (response->device_address != request->device_address)
     {
         return WRONG_ADDRESS;
@@ -390,12 +387,32 @@ modbus_status_t response_processing(const MODBUS_message *response, const MODBUS
     switch (response->command)
     {
     case READ_DO:
+        shift = request->start_address - registers->DO_start_address;
+        for (uint16_t i = 0; i < response->byte_count / 2; i++)
+        {
+            registers->DO[shift + i] = response->data[i];
+        }
         break;
     case READ_DI:
+        shift = request->start_address - registers->DI_start_address;
+        for (uint16_t i = 0; i < response->byte_count / 2; i++)
+        {
+            registers->DI[shift + i] = response->data[i];
+        }
         break;
     case READ_AO:
+        shift = request->start_address - registers->AO_start_address;
+        for (uint16_t i = 0; i < response->byte_count / 2; i++)
+        {
+            registers->AO[shift + i] = response->data[i];
+        }
         break;
     case READ_AI:
+        shift = request->start_address - registers->AI_start_address;
+        for (uint16_t i = 0; i < response->byte_count / 2; i++)
+        {
+            registers->AI[shift + i] = response->data[i];
+        }
         break;
     case WRITE_DO:
         break;
