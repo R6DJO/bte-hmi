@@ -148,8 +148,8 @@ modbus_status_t msg_parse(UART_message *buf, MODBUS_message *rx_msg)
     case WRITE_DO:
     case WRITE_AO:
         rx_msg->start_address = (buf->msg_data[2] << 8) | buf->msg_data[3];
-        rx_msg->data[0] = (buf->msg_data[4] << 8) | buf->msg_data[5];
-        rx_msg->data_length = 0x01;
+        rx_msg->data_length = (buf->msg_data[4] << 8) | buf->msg_data[5];
+        rx_msg->data[0] = (buf->msg_data[6] << 8) | buf->msg_data[7];
         break;
     case READ_EXCEPTION:
     case DIAGNOSTIC:
@@ -169,6 +169,50 @@ modbus_status_t msg_parse(UART_message *buf, MODBUS_message *rx_msg)
     }
 
     rx_msg->crc = (buf->msg_data[buf->msg_length - 2]) | (buf->msg_data[buf->msg_length - 1] << 8);
+    return MB_OK;
+}
+
+modbus_status_t msg_parse_from_slave(UART_message *buf, MODBUS_message *msg)
+{
+    msg->device_address = buf->msg_data[0];
+    msg->command = buf->msg_data[1];
+
+    switch (msg->command)
+    {
+    case READ_DO:
+    case READ_DI:
+    case READ_AO:
+    case READ_AI:
+        msg->byte_count = buf->msg_data[2];
+        for (uint8_t i = 0; i < msg->byte_count / 2; i++)
+        {
+            msg->data[i] = (buf->msg_data[3 + i * 2] << 8) | buf->msg_data[4 + i * 2];
+        }
+        break;
+    case WRITE_DO:
+    case WRITE_AO:
+        msg->start_address = (buf->msg_data[2] << 8) | buf->msg_data[3];
+        msg->data_length = (buf->msg_data[4] << 8) | buf->msg_data[5];
+        msg->data[0] = (buf->msg_data[6] << 8) | buf->msg_data[7];
+        break;
+    case READ_EXCEPTION:
+    case DIAGNOSTIC:
+        break;
+    case WRITE_DO_MULTI:
+    case WRITE_AO_MULTI:
+        msg->start_address = (buf->msg_data[2] << 8) | buf->msg_data[3];
+        msg->data_length = (buf->msg_data[4] << 8) | buf->msg_data[5];
+        msg->byte_count = buf->msg_data[6];
+        for (uint8_t i = 0; i < buf->msg_length - 9; i++)
+        {
+            msg->data[i] = (buf->msg_data[7 + i * 2] << 8) | buf->msg_data[8 + i * 2];
+        }
+        break;
+    default:
+        break;
+    }
+
+    msg->crc = (buf->msg_data[buf->msg_length - 2]) | (buf->msg_data[buf->msg_length - 1] << 8);
     return MB_OK;
 }
 
@@ -270,7 +314,7 @@ modbus_status_t response_prepare(MODBUS_message *rx_msg, MODBUS_registers *regis
             break;
         case READ_DI:
             tx_buf->msg_data[tx_buf->msg_length++] = rx_msg->data_length << 1;
-            shift = rx_msg->start_address - registers->DI_start_address;            
+            shift = rx_msg->start_address - registers->DI_start_address;
             for (uint16_t i = 0; i < rx_msg->data_length; i++)
             {
                 tx_buf->msg_data[tx_buf->msg_length++] = registers->DI[shift + i] >> 8;
@@ -308,7 +352,7 @@ modbus_status_t response_prepare(MODBUS_message *rx_msg, MODBUS_registers *regis
             tx_buf->msg_data[tx_buf->msg_length++] = rx_msg->start_address & 0xFF;
             tx_buf->msg_data[tx_buf->msg_length++] = rx_msg->data[0] >> 8;
             tx_buf->msg_data[tx_buf->msg_length++] = rx_msg->data[0] & 0xFF;
-            shift = rx_msg->start_address - registers->DO_start_address;
+            shift = rx_msg->start_address - registers->AO_start_address;
             registers->AO[shift] = rx_msg->data[0];
             break;
         case READ_EXCEPTION:
@@ -363,6 +407,27 @@ modbus_status_t prepare_request_mbmsg(const MODBUS_message *request, UART_messag
     tx_buf->msg_data[tx_buf->msg_length++] = request->start_address & 0xFF;
     tx_buf->msg_data[tx_buf->msg_length++] = request->data_length >> 8;
     tx_buf->msg_data[tx_buf->msg_length++] = request->data_length & 0xFF;
+    switch (request->command)
+    {
+    case READ_DO:
+    case READ_DI:
+    case READ_AO:
+    case READ_AI:
+        break;
+    case WRITE_DO:
+    case WRITE_AO:
+        tx_buf->msg_data[tx_buf->msg_length++] = request->data[0] >> 8;
+        tx_buf->msg_data[tx_buf->msg_length++] = request->data[0] & 0xFF;
+        break;
+    case WRITE_DO_MULTI:
+    case WRITE_AO_MULTI:
+        tx_buf->msg_data[tx_buf->msg_length++] = request->byte_count;
+        for (uint16_t i = 0; i < request->data_length; i++)
+        {
+            tx_buf->msg_data[tx_buf->msg_length++] = request->data[i] >> 8;
+            tx_buf->msg_data[tx_buf->msg_length++] = request->data[i] & 0xFF;
+        }
+    }
     uint16_t crc = MODBUS_CRC16(tx_buf->msg_data, tx_buf->msg_length);
     tx_buf->msg_data[tx_buf->msg_length++] = crc & 0xFF;
     tx_buf->msg_data[tx_buf->msg_length++] = crc >> 8;
@@ -431,72 +496,3 @@ modbus_status_t response_processing(const MODBUS_message *response, const MODBUS
     }
     return MB_OK;
 }
-
-//
-// uint8_t prepare_tx_msg(union message *rx_msg, union message *tx_msg,
-// uint16_t *data)
-//{
-//    if (rx_msg->msg.device_address != DEVICE_ADDRESS)
-//        return 0;
-//    tx_msg->msg.device_address = rx_msg->msg.device_address;
-//
-//    if (rx_msg->msg.command != COMMAND)
-//        return 0;
-//    tx_msg->msg.command = rx_msg->msg.command;
-//
-//    if (rx_msg->msg.start_address < START_ADDRESS ||
-//    (rx_msg->msg.start_address + rx_msg->msg.data_length) > START_ADDRESS +
-//    REGISTER_COUNT)
-//        return 0;
-//
-//    tx_msg->msg.start_address = rx_msg->msg.start_address;
-//    tx_msg->msg.data_length = rx_msg->msg.data_length;
-//
-//    uint8_t offset = tx_msg->msg.start_address - START_ADDRESS;
-//    for (uint8_t i = 0; i < tx_msg->msg.data_length; i++)
-//    {
-//        tx_msg->msg.data[i] = data[i + offset];
-//    }
-//    return 1;
-//}
-//
-// void prepare_tx_buf(union message *tx_msg, uint8_t *tx_buf)
-//{
-//    strcat(tx_buf, ":");
-//
-//    itoalz(tx_buf, tx_msg->msg.device_address);
-//
-//    itoalz(tx_buf, tx_msg->msg.command);
-//
-//    itoalz(tx_buf, tx_msg->msg.start_address >> 8);
-//    itoalz(tx_buf, tx_msg->msg.start_address & 0xFF);
-//
-//    itoalz(tx_buf, tx_msg->msg.data_length >> 8);
-//    itoalz(tx_buf, tx_msg->msg.data_length & 0xFF);
-//
-//    for (uint8_t i = 0; i < tx_msg->msg.data_length; i++)
-//    {
-//        itoalz(tx_buf, tx_msg->msg.data[i] >> 8);
-//        itoalz(tx_buf, tx_msg->msg.data[i] & 0xFF);
-//    }
-//    uint8_t checksum = 0;
-//    checksum += tx_msg->msg.device_address;
-//
-//    checksum += tx_msg->msg.command;
-//
-//    checksum += tx_msg->msg.start_address >> 8;
-//    checksum += tx_msg->msg.start_address & 0xFF;
-//
-//    checksum += tx_msg->msg.data_length >> 8;
-//    checksum += tx_msg->msg.data_length & 0xFF;
-//
-//    for (uint8_t i = 0; i < tx_msg->msg.data_length; i++)
-//    {
-//        checksum += (tx_msg->msg.data[i] >> 8);
-//        checksum += (tx_msg->msg.data[i] & 0xFF);
-//    }
-//    checksum = 255 - checksum + 1;
-//
-//    itoalz(tx_buf, checksum);
-//    strcat(tx_buf, "\r\n");
-//}

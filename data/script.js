@@ -46,15 +46,6 @@ function updateWorkMode(element) {
 }
 
 function updateLamp1(element) {
-    // console.log(element.style.color)
-    // if (element.style.color == "yellow") {
-    //     // element.style.color=="darkblue"
-    //     document.getElementById("lamp").style = "font-size:64px;color:darkblue"
-    // }
-    // else if (element.style.color == "darkblue") {
-    //     // element.style.color=="yellow"
-    //     document.getElementById("lamp").style = "font-size:64px;color:yellow"
-    // }
     document.getElementById("lamp").style = "font-size:64px;color:grey"
     console.log("Web->HMI lampSwitch")
     websocket.send("LampSwitch")
@@ -63,8 +54,18 @@ function updateLamp1(element) {
 function onMessage(event) {
     console.log("Web<-HMI" + event.data);
     var data = JSON.parse(event.data);
-    document.getElementById("workMode").value = data.mode;
-    document.getElementById("workModeValue").innerHTML = mode[data.mode];
+    if (data.mode == 1) {
+        document.getElementById("workMode").value = 1;
+        document.getElementById("workModeValue").innerHTML = mode[1];
+    } else {
+        if (data.status == 1) {
+            document.getElementById("workMode").value = 2;
+            document.getElementById("workModeValue").innerHTML = mode[2];
+        } else {
+            document.getElementById("workMode").value = 0;
+            document.getElementById("workModeValue").innerHTML = mode[0];
+        }
+    }
     document.getElementById("threshold").value = data.threshold;
     document.getElementById("thresholdValue").innerHTML = data.threshold;
     document.getElementById("ambientLight").innerHTML = data.ambient_light;
